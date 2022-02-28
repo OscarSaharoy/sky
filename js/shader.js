@@ -19,6 +19,8 @@ uniform vec3  uSunDir;
 #define X vec3( 1., 0., 0. )
 #define Y vec3( 0., 1., 0. )
 #define Z vec3( 0., 0., 1. )
+#define SCATTERING 0.2
+#define WAVELENGTHS vec3( 400. / 700., 400. / 530., 400. / 440. ) 
 
 
 vec3 getView( in vec2 fragCoord ) {
@@ -57,6 +59,17 @@ vec2 intersectWorld( in vec3 viewPos, in vec3 viewDir ) {
     return vec2( nearHit, farHit - nearHit );
 }
 
+vec3 worldNormal( in vec3 viewPos, in vec3 viewDir ) {
+
+    float distToWorld = intersectWorld( viewPos, viewDir ).x;
+
+    if( distToWorld == -1. ) return vec3( 0. );
+
+    vec3 worldPos = viewPos + distToWorld * viewDir;
+    
+    return normalize( worldPos );
+}
+
 vec2 intersectAtm( in vec3 viewPos, in vec3 viewDir ) {
 
     float b = 2. * dot( viewPos, viewDir );
@@ -76,6 +89,13 @@ vec2 intersectAtm( in vec3 viewPos, in vec3 viewDir ) {
     return vec2( nearHit, farHit - nearHit );
 }
 
+vec3 worldLight( in vec3 viewPos, in vec3 viewDir ) {
+    
+    vec3 normal = worldNormal( viewPos, viewDir );
+    float diffuse = dot( normal, uSunDir );
+
+    return vec3( diffuse );
+}
 
 float densityAtPoint( in vec3 point ) {
 
@@ -105,11 +125,12 @@ float opticalDepth( in vec3 rayOrigin, in vec3 rayDir, in float rayLength ) {
     return opticalDepth;
 }
 
-float calculateLight( in vec3 viewPos, in vec3 viewDir, in float viewLength ) {
+vec3 calculateLight( in vec3 viewPos, in vec3 viewDir, in float viewLength ) {
     
     vec3 inScatterPoint = viewPos;
     float stepSize = viewLength / (N_STEPS - 1.);
-    float inScatteredLight = 0.;
+    vec3 inScatteredLight = vec3( 0. );
+    vec3 scatterCoefficients = pow( WAVELENGTHS, vec3(4.) ) * SCATTERING;
 
     for( int i=0; i<int(N_STEPS); ++i ) {
         
@@ -117,11 +138,11 @@ float calculateLight( in vec3 viewPos, in vec3 viewDir, in float viewLength ) {
         float sunRayOpticalDepth = opticalDepth( inScatterPoint, uSunDir, sunRayLength );
         float viewRayOpticalDepth = opticalDepth( inScatterPoint, -viewDir, stepSize * float(i) );
 
-        float transmittance = exp( -sunRayOpticalDepth - viewRayOpticalDepth );
+        vec3 transmittance = exp( -( sunRayOpticalDepth + viewRayOpticalDepth) * scatterCoefficients );
        
         float localDensity = densityAtPoint( inScatterPoint );
 
-        inScatteredLight += localDensity * transmittance * stepSize;
+        inScatteredLight += localDensity * transmittance * scatterCoefficients * stepSize;
         inScatterPoint += viewDir * stepSize;
     }
 
@@ -143,11 +164,11 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
     if( distThroughAtm > 0. ) {
          
         vec3 pointInAtm = uViewPos + view * (distToAtm - 1e-4);
-        float light = calculateLight( pointInAtm, view, distThroughAtm + 1e-4 );
-
-        colour = vec3( light );
+        colour = calculateLight( pointInAtm, view, distThroughAtm + 1e-4 );
     }
-    
+   
+    colour += worldLight( uViewPos, view ) * 0.2;
+
     fragColor = vec4( colour, 1.0 );
 }
 
