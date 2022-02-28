@@ -18,8 +18,11 @@ const plane = new THREE.PlaneGeometry(2, 2);
 const dpr   = window.devicePixelRatio;
 
 const uniforms = {
-    iTime:          { value: 0 },
-    iResolution:    { value: new THREE.Vector2() },
+    uTime:       { value: 0 },
+    uResolution: { value: new THREE.Vector2() },
+    uViewPos:    { value: new THREE.Vector3( 0, 0, 270 ) },
+    uViewDir:    { value: new THREE.Vector3( 0, 0, -1 ) },
+    uSunDir:     { value: new THREE.Vector3( 0.2, 0.2, 0.96 ) }
 };
 
 const material = new THREE.ShaderMaterial({
@@ -40,7 +43,7 @@ function resizeRendererToDisplaySize( renderer ) {
     const height  = canvas.clientHeight;
 
     renderer.setSize( width*dpr, height*dpr, false );
-    uniforms.iResolution.value.set( width * dpr, height * dpr );
+    uniforms.uResolution.value.set( width * dpr, height * dpr );
 }
 
 function render( time ) {
@@ -50,7 +53,8 @@ function render( time ) {
     renderer.render(scene, camera);
     // console.log("render");
 
-    uniforms.iTime.value = time;
+    uniforms.uTime.value = time;
+    uniforms.uSunDir.value.set( 0.9 * Math.cos(time), 0.45, 0.9 * Math.sin(time) );
 
     requestAnimationFrame(render);
 }
