@@ -22,7 +22,7 @@ const uniforms = {
     uResolution: { value: new THREE.Vector2() },
     uViewPos:    { value: new THREE.Vector3( 0, 0, 270 ) },
     uViewDir:    { value: new THREE.Vector3( 0, 0, -1 ) },
-    uSunDir:     { value: new THREE.Vector3( 0.2, 0.2, 0.96 ) }
+    uSunDir:     { value: new THREE.Vector3( 0.2, 0.3, -0.93 ) }
 };
 
 const material = new THREE.ShaderMaterial({

@@ -20,7 +20,14 @@ uniform vec3  uSunDir;
 #define Y vec3( 0., 1., 0. )
 #define Z vec3( 0., 0., 1. )
 #define SCATTERING 0.2
+#define DENSITY_FALLOFF 7.
 #define WAVELENGTHS vec3( 400. / 700., 400. / 530., 400. / 440. ) 
+
+
+vec3 saturate( in vec3 colour ) {
+    
+    return clamp( colour, vec3(0.), vec3(1.) );
+}
 
 
 vec3 getView( in vec2 fragCoord ) {
@@ -99,17 +106,22 @@ vec3 worldLight( in vec3 viewPos, in vec3 viewDir ) {
 
 float densityAtPoint( in vec3 point ) {
 
-    float densityFalloff = 7.;
-
     float heightAboveSurface = length( point ) - WORLD_RADIUS;
     float scaledHeight = heightAboveSurface / ( ATM_RADIUS - WORLD_RADIUS );
 
-    float localDensity = exp( - scaledHeight * densityFalloff ) * ( 1. - scaledHeight );
+    float localDensity = exp( - scaledHeight * DENSITY_FALLOFF );
     
     return localDensity;
 }
 
 float opticalDepth( in vec3 rayOrigin, in vec3 rayDir, in float rayLength ) {
+
+    float height = length( rayOrigin );
+    float cos = dot( rayOrigin, rayDir ) / height;
+
+    float scale = exp( 1.07 + 2.1 * exp( -1.9*cos ) + 0.07 / (cos+0.66) / (cos+0.66) );
+
+    return exp( -0.35 * ( height - WORLD_RADIUS ) ) * scale;
 
     vec3 densitySamplePoint = rayOrigin;
     float stepSize = rayLength / (N_STEPS - 1.);
@@ -149,6 +161,60 @@ vec3 calculateLight( in vec3 viewPos, in vec3 viewDir, in float viewLength ) {
     return inScatteredLight;
 }
 
+
+
+#define StarsNum 32.    //number of stars
+#define StarsSize 0.025 //size of stars
+#define StarsBright 2.0 //Bright of stars
+
+vec2 rand2(vec2 p) {
+        
+    p = vec2(dot(p, vec2(12.9898,78.233)), dot(p, vec2(26.65125, 83.054543))); 
+    return fract(sin(p) * 43758.5453);
+}
+
+float rand(vec3 p) {
+
+    return fract(sin(dot(p, vec3(54.90898,18.233,37.42537))) * 4337.5453);
+}
+
+float starLight( in vec3 viewDir ) {
+   
+    return rand( viewDir );
+
+    float numCells = StarsNum;
+    float size = 1.;
+    float br = 1.;
+    vec2 x = vec2(0);
+
+    vec2 n = x * numCells;
+    vec2 f = floor(n);
+
+    float d = 1.0e10;
+    for (int i = -1; i <= 1; ++i) {
+
+        for (int j = -1; j <= 1; ++j) {
+            
+            //vec2 g = f + vec2(float(i), float(j));
+            //g = n - g - rand2(mod(g, numCells)) + rand(g);
+                                            
+            // Control size
+            //g *= 1. / (numCells * size);
+            //d = min(d, dot(g, g));
+        }
+    }
+                                
+    return br * (smoothstep(.95, 1., (1. - sqrt(d))));
+}
+
+
+vec3 sunLight( in vec3 viewDir ) {
+    
+    float brightness = pow( dot( viewDir, uSunDir ), 25.0 ) + clamp( dot( viewDir, uSunDir )*200.0-199., 0., 1. );
+
+    return saturate( vec3(brightness) );
+}
+
 void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
     
     vec3 view = getView( fragCoord );
@@ -167,7 +233,9 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
         colour = calculateLight( pointInAtm, view, distThroughAtm + 1e-4 );
     }
    
-    colour += worldLight( uViewPos, view ) * 0.2;
+    colour += worldLight( uViewPos, view ) * vec3( 0.6, 0.8, 0.9 ) * 0.2;
+    //colour += starLight( view );
+    //colour += sunLight( view );
 
     fragColor = vec4( colour, 1.0 );
 }
