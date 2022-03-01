@@ -47,6 +47,24 @@ vec3 getView( in vec2 fragCoord ) {
 }
 
 
+bool lookingUp( in vec3 viewPos, in vec3 viewDir ) {
+ 
+    float b = 2. * dot( viewPos, viewDir );
+    float c = dot( viewPos, viewPos ) - WORLD_RADIUS * WORLD_RADIUS;
+
+    float d = b*b - 4.*c;
+
+    if( d < 0. ) return false;
+
+    float s = sqrt( d );
+
+    float nearHit = -( b + s) / 2.;
+    float farHit  = -( b - s) / 2.;
+
+    return farHit < 0.;
+}
+
+
 vec2 intersectWorld( in vec3 viewPos, in vec3 viewDir ) {
 
     float b = 2. * dot( viewPos, viewDir );
@@ -143,12 +161,18 @@ vec3 calculateLight( in vec3 viewPos, in vec3 viewDir, in float viewLength ) {
     float stepSize = viewLength / (N_STEPS - 1.);
     vec3 inScatteredLight = vec3( 0. );
     vec3 scatterCoefficients = pow( WAVELENGTHS, vec3(4.) ) * SCATTERING;
+    
+    bool inAtm = intersectAtm( viewPos, viewDir ).x == 0.;
+    bool hitWorld = intersectWorld( viewPos, viewDir ).x != -1.;
 
     for( int i=0; i<int(N_STEPS); ++i ) {
         
         float sunRayLength = intersectAtm( inScatterPoint, uSunDir ).y;
         float sunRayOpticalDepth = opticalDepth( inScatterPoint, uSunDir, sunRayLength );
         float viewRayOpticalDepth = opticalDepth( inScatterPoint, -viewDir, stepSize * float(i) );
+
+        if( inAtm && !hitWorld )
+            viewRayOpticalDepth = opticalDepth( viewPos, viewDir, 0. ) -  opticalDepth( inScatterPoint, viewDir, 0. );
 
         vec3 transmittance = exp( -( sunRayOpticalDepth + viewRayOpticalDepth) * scatterCoefficients );
        
