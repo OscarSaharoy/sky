@@ -29,6 +29,18 @@ vec3 saturate( in vec3 colour ) {
     return clamp( colour, vec3(0.), vec3(1.) );
 }
 
+mat4 rotationMatrix(vec3 axis, float angle) {
+
+    axis = normalize(axis);
+    float s = sin(angle);
+    float c = cos(angle);
+    float oc = 1.0 - c;
+    
+    return mat4(oc * axis.x * axis.x + c,           oc * axis.x * axis.y - axis.z * s,  oc * axis.z * axis.x + axis.y * s,  0.0,
+                oc * axis.x * axis.y + axis.z * s,  oc * axis.y * axis.y + c,           oc * axis.y * axis.z - axis.x * s,  0.0,
+                oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c,           0.0,
+                0.0,                                0.0,                                0.0,                                1.0);
+}
 
 vec3 getView( in vec2 fragCoord ) {
  
@@ -43,8 +55,12 @@ vec3 getView( in vec2 fragCoord ) {
     //vec3 right   = cross( forward, normalize( uViewPos ) );
     vec3 right   = normalize( cross( forward, Y ) );
     vec3 up      = normalize( cross( right, forward ) );
+    
+    float r = 0.5;
+    float tanX = mix( tan( uv.x / r ), uv.x / r, 0.9 );
+    float tanY = mix( tan( uv.y / r ), uv.y / r, 0.9 );
 
-    return normalize( forward*0.5 + uv.x * right + uv.y * up );
+    return normalize( r * forward + r * tanX * right + r * tanY * up );
 }
 
 
