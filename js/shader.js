@@ -40,28 +40,11 @@ vec3 getView( in vec2 fragCoord ) {
     // generate the view ray
 
     vec3 forward = normalize( uViewDir );
-    vec3 right   = cross( forward, Y );
-    vec3 up      = cross( right, forward );
+    //vec3 right   = cross( forward, normalize( uViewPos ) );
+    vec3 right   = normalize( cross( forward, Y ) );
+    vec3 up      = normalize( cross( right, forward ) );
 
     return normalize( forward*0.5 + uv.x * right + uv.y * up );
-}
-
-
-bool lookingUp( in vec3 viewPos, in vec3 viewDir ) {
- 
-    float b = 2. * dot( viewPos, viewDir );
-    float c = dot( viewPos, viewPos ) - WORLD_RADIUS * WORLD_RADIUS;
-
-    float d = b*b - 4.*c;
-
-    if( d < 0. ) return false;
-
-    float s = sqrt( d );
-
-    float nearHit = -( b + s) / 2.;
-    float farHit  = -( b - s) / 2.;
-
-    return farHit < 0.;
 }
 
 
@@ -84,17 +67,6 @@ vec2 intersectWorld( in vec3 viewPos, in vec3 viewDir ) {
     return vec2( nearHit, farHit - nearHit );
 }
 
-vec3 worldNormal( in vec3 viewPos, in vec3 viewDir ) {
-
-    float distToWorld = intersectWorld( viewPos, viewDir ).x;
-
-    if( distToWorld == -1. ) return vec3( 0. );
-
-    vec3 worldPos = viewPos + distToWorld * viewDir;
-    
-    return normalize( worldPos );
-}
-
 vec2 intersectAtm( in vec3 viewPos, in vec3 viewDir ) {
 
     float b = 2. * dot( viewPos, viewDir );
@@ -114,14 +86,6 @@ vec2 intersectAtm( in vec3 viewPos, in vec3 viewDir ) {
     return vec2( nearHit, farHit - nearHit );
 }
 
-vec3 worldLight( in vec3 viewPos, in vec3 viewDir ) {
-    
-    vec3 normal = worldNormal( viewPos, viewDir );
-    float diffuse = dot( normal, uSunDir );
-
-    return vec3( diffuse );
-}
-
 float densityAtPoint( in vec3 point ) {
 
     float heightAboveSurface = length( point ) - WORLD_RADIUS;
@@ -132,7 +96,7 @@ float densityAtPoint( in vec3 point ) {
     return localDensity;
 }
 
-float opticalDepth( in vec3 rayOrigin, in vec3 rayDir, in float rayLength ) {
+float opticalDepth( in vec3 rayOrigin, in vec3 rayDir ) {
 
     float height = length( rayOrigin );
     float cos = dot( rayOrigin, rayDir ) / height;
@@ -140,20 +104,8 @@ float opticalDepth( in vec3 rayOrigin, in vec3 rayDir, in float rayLength ) {
     float scale = exp( 1.07 + 2.1 * exp( -1.9*cos ) + 0.07 / (cos+0.66) / (cos+0.66) );
 
     return exp( -0.35 * ( height - WORLD_RADIUS ) ) * scale;
-
-    vec3 densitySamplePoint = rayOrigin;
-    float stepSize = rayLength / (N_STEPS - 1.);
-    float opticalDepth = 0.;
-
-    for( int i=0; i<int(N_STEPS); ++i ) {
-
-        float localDensity = densityAtPoint( densitySamplePoint );
-        opticalDepth += localDensity * stepSize;
-        densitySamplePoint += rayDir * stepSize;
-    }
-
-    return opticalDepth;
 }
+
 
 vec3 calculateLight( in vec3 viewPos, in vec3 viewDir, in float viewLength ) {
     
@@ -167,13 +119,11 @@ vec3 calculateLight( in vec3 viewPos, in vec3 viewDir, in float viewLength ) {
 
     for( int i=0; i<int(N_STEPS); ++i ) {
         
-        float sunRayLength = intersectAtm( inScatterPoint, uSunDir ).y;
-        float sunRayOpticalDepth = opticalDepth( inScatterPoint, uSunDir, sunRayLength );
-        float viewRayOpticalDepth = opticalDepth( inScatterPoint, -viewDir, stepSize * float(i) );
-
-        if( inAtm && !hitWorld )
-            viewRayOpticalDepth = opticalDepth( viewPos, viewDir, 0. ) -  opticalDepth( inScatterPoint, viewDir, 0. );
-
+        float sunRayOpticalDepth = opticalDepth( inScatterPoint, uSunDir );
+        float viewRayOpticalDepth = inAtm && !hitWorld
+            ? opticalDepth( viewPos, viewDir ) - opticalDepth( inScatterPoint, viewDir )
+            : opticalDepth( inScatterPoint, -viewDir ) - opticalDepth( viewPos, -viewDir ); 
+            
         vec3 transmittance = exp( -( sunRayOpticalDepth + viewRayOpticalDepth) * scatterCoefficients );
        
         float localDensity = densityAtPoint( inScatterPoint );
@@ -181,62 +131,43 @@ vec3 calculateLight( in vec3 viewPos, in vec3 viewDir, in float viewLength ) {
         inScatteredLight += localDensity * transmittance * scatterCoefficients * stepSize;
         inScatterPoint += viewDir * stepSize;
     }
-
+    
     return inScatteredLight;
 }
 
 
+vec3 worldLight( in vec3 viewPos, in vec3 viewDir ) {
 
-#define StarsNum 32.    //number of stars
-#define StarsSize 0.025 //size of stars
-#define StarsBright 2.0 //Bright of stars
+    float distToWorld = intersectWorld( viewPos, viewDir ).x;
 
-vec2 rand2(vec2 p) {
-        
-    p = vec2(dot(p, vec2(12.9898,78.233)), dot(p, vec2(26.65125, 83.054543))); 
-    return fract(sin(p) * 43758.5453);
-}
+    if( distToWorld == -1. ) return vec3( 0. );
 
-float rand(vec3 p) {
+    vec3 worldPos = viewPos + distToWorld * viewDir;
+    vec3 normal   = normalize( worldPos );
 
-    return fract(sin(dot(p, vec3(54.90898,18.233,37.42537))) * 4337.5453);
-}
+    vec3 scatterCoefficients = pow( WAVELENGTHS, vec3(4.) ) * SCATTERING;
+    float diffuse = dot( normal, uSunDir );
+    float opticalDepth = opticalDepth( worldPos, -viewDir ) - opticalDepth( viewPos, -viewDir );
 
-float starLight( in vec3 viewDir ) {
-   
-    return rand( viewDir );
-
-    float numCells = StarsNum;
-    float size = 1.;
-    float br = 1.;
-    vec2 x = vec2(0);
-
-    vec2 n = x * numCells;
-    vec2 f = floor(n);
-
-    float d = 1.0e10;
-    for (int i = -1; i <= 1; ++i) {
-
-        for (int j = -1; j <= 1; ++j) {
-            
-            //vec2 g = f + vec2(float(i), float(j));
-            //g = n - g - rand2(mod(g, numCells)) + rand(g);
-                                            
-            // Control size
-            //g *= 1. / (numCells * size);
-            //d = min(d, dot(g, g));
-        }
-    }
-                                
-    return br * (smoothstep(.95, 1., (1. - sqrt(d))));
+    return vec3( 0.15, 0.28, 0.5 ) * diffuse * exp( -opticalDepth * SCATTERING );
 }
 
 
-vec3 sunLight( in vec3 viewDir ) {
-    
-    float brightness = pow( dot( viewDir, uSunDir ), 25.0 ) + clamp( dot( viewDir, uSunDir )*200.0-199., 0., 1. );
+vec3 hash3( vec3 p ) {
+    vec3 q = vec3( dot(p,vec3(127.1,311.7,432.2)), 
+                   dot(p,vec3(269.5,183.3,847.6)), 
+                   dot(p,vec3(419.2,371.9,927.0)) );
+    return fract(sin(q)*43758.5453);
+}
 
-    return saturate( vec3(brightness) );
+
+vec3 starLight( in vec3 viewPos, in vec3 viewDir, in vec3 preColour ) {
+
+    if( length(preColour) > 0. ) return vec3( 0. );
+
+    vec3 offset = hash3( floor(viewDir*10.) );
+
+    return saturate( vec3( 1.02 - 20.*length( mod( viewDir, vec3(0.1) ) * 10. - offset * 0.5 ) ) );
 }
 
 void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
@@ -257,8 +188,8 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
         colour = calculateLight( pointInAtm, view, distThroughAtm + 1e-4 );
     }
    
-    colour += worldLight( uViewPos, view ) * vec3( 0.6, 0.8, 0.9 ) * 0.2;
-    //colour += starLight( view );
+    colour += worldLight( uViewPos, view );
+    colour += starLight( uViewPos, view, colour );
     //colour += sunLight( view );
 
     fragColor = vec4( colour, 1.0 );

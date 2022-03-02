@@ -21,7 +21,7 @@ const uniforms = {
     uTime:       { value: 0 },
     uResolution: { value: new THREE.Vector2() },
     uViewPos:    { value: new THREE.Vector3( 0, 0, 270 ) },
-    uViewDir:    { value: new THREE.Vector3( 0, 0, -1 ) },
+    uViewDir:    { value: new THREE.Vector3( 0, 0, -1. ) },
     uSunDir:     { value: new THREE.Vector3( 0.2, 0.3, -0.93 ) }
 };
 
@@ -56,6 +56,8 @@ function render( time ) {
     uniforms.uTime.value = time;
     uniforms.uSunDir.value.set( 0.9 * Math.cos(time), 0.45, 0.9 * Math.sin(time) );
 
+    panAndZoom();
+    
     requestAnimationFrame(render);
 }
 
@@ -70,6 +72,5 @@ function download() {
 }
 
 document.addEventListener( "keydown", e => e.key == "d" ? download() : 0 );
-
 
 requestAnimationFrame(render);
